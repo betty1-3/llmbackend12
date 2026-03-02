@@ -181,6 +181,9 @@ Farmer speech:
       }
     }
 
+    const today = new Date().toISOString().split("T")[0];
+    extracted.generated_date = today;
+    
     return res.json(extracted);
 
   } catch (err) {
