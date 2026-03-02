@@ -139,7 +139,7 @@ Farmer speech:
 
     // 🔥 New SDK call
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       contents: prompt,
     });
 
