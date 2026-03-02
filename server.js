@@ -42,7 +42,8 @@ app.post('/api/ask-llm', async (req, res) => {
     if (field === "location") {
       extractionInstruction = `
 Extract:
-- district state
+- district
+- state
 
 Return:
 {
