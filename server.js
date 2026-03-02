@@ -23,7 +23,7 @@ const model = genAI.getGenerativeModel({
 });
 
 // ✅ Allow frontend
-app.use(cors({ origin: 'https://chatbot12-omega.vercel.app' }));
+app.use(cors());
 app.use(express.json({ limit: '128kb' }));
 
 // ===============================
