@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
 
@@ -13,19 +13,17 @@ if (!process.env.GEMINI_API_KEY) {
   process.exit(1);
 }
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Use safest compatible model
-const model = genAI.getGenerativeModel({
-  model: "gemini-pro"
+// Initialize new Gemini SDK
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
 app.use(cors());
 app.use(express.json({ limit: "128kb" }));
 
-// Health check route
+// Health check
 app.get("/", (req, res) => {
-  res.send("✅ Gemini backend running");
+  res.send("✅ Gemini backend running (new SDK)");
 });
 
 // ===============================
@@ -39,7 +37,7 @@ app.post("/api/ask-llm", async (req, res) => {
 
     if (!speech_input || !field) {
       return res.status(400).json({
-        error: "Missing speech_input or field"
+        error: "Missing speech_input or field",
       });
     }
 
@@ -55,7 +53,7 @@ Extract:
 If a city like "Nagpur" is mentioned with a state,
 assume that city is also the district.
 
-Return JSON:
+Return strictly valid JSON:
 {
   "district": string | null,
   "state": string | null
@@ -68,10 +66,10 @@ Return JSON:
 Extract:
 - farm_size_acres (number)
 
-Convert spoken numbers like "three", "teen", etc into numeric form.
+Convert spoken numbers like "teen", "three", etc into numeric form.
 Always return acres.
 
-Return JSON:
+Return strictly valid JSON:
 {
   "farm_size_acres": number | null
 }
@@ -83,10 +81,9 @@ Return JSON:
 Extract:
 - crop_type
 
-Normalize to English crop name like:
-rice, wheat, maize, cotton, sugarcane, etc.
+Normalize crop name to English (rice, wheat, maize, cotton, etc).
 
-Return JSON:
+Return strictly valid JSON:
 {
   "crop_type": string | null
 }
@@ -103,7 +100,7 @@ Convert informal phrases like:
 "last week"
 "kharif season"
 
-Return JSON:
+Return strictly valid JSON:
 {
   "sowing_date": string | null
 }
@@ -112,7 +109,7 @@ Return JSON:
 
       default:
         return res.status(400).json({
-          error: "Invalid field type"
+          error: "Invalid field type",
         });
     }
 
@@ -129,7 +126,7 @@ You must:
 - Normalize crop names.
 - Convert word numbers to numeric.
 - Convert informal dates.
-- Do NOT guess missing information.
+- Do NOT guess missing data.
 - Return ONLY valid JSON.
 - No explanation.
 - No markdown.
@@ -140,20 +137,23 @@ Farmer speech:
 "${speech_input}"
 `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    // 🔥 New SDK call
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: prompt,
+    });
+
+    const text = response.text;
 
     console.log("Gemini raw output:", text);
 
-    // Extract JSON block safely
+    // Extract JSON safely
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
-      console.error("No JSON found in Gemini response");
       return res.status(500).json({
-        error: "No JSON found",
-        raw: text
+        error: "No JSON found in Gemini response",
+        raw: text,
       });
     }
 
@@ -162,15 +162,13 @@ Farmer speech:
     try {
       extracted = JSON.parse(jsonMatch[0]);
     } catch (parseError) {
-      console.error("JSON parse failed:", jsonMatch[0]);
       return res.status(500).json({
         error: "JSON parse failed",
-        raw: text
+        raw: text,
       });
     }
 
-    // 🔒 Basic Validation Layer
-
+    // Basic validation
     if (extracted.farm_size_acres !== undefined) {
       if (
         typeof extracted.farm_size_acres !== "number" ||
@@ -193,7 +191,7 @@ Farmer speech:
     console.error("❌ Gemini processing error:", err);
     return res.status(500).json({
       error: "Extraction failed",
-      details: err.message
+      details: err.message,
     });
   }
 });
