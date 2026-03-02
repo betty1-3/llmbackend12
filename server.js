@@ -23,7 +23,7 @@ const model = genAI.getGenerativeModel({
 });
 
 // ✅ Allow frontend
-app.use(cors({ origin: 'https://aichatbot-inky-sigma.vercel.app' }));
+app.use(cors({ origin: 'https://chatbot12-omega.vercel.app' }));
 app.use(express.json({ limit: '128kb' }));
 
 // ===============================
