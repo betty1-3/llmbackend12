@@ -42,8 +42,7 @@ app.post('/api/ask-llm', async (req, res) => {
     if (field === "location") {
       extractionInstruction = `
 Extract:
-- district
-- state
+- district state
 
 Return:
 {
@@ -104,6 +103,7 @@ You must:
 - Correct obvious spelling errors in district/state.
 - Normalize crop names.
 - Convert word numbers to numeric.
+- Convert farm size to acres always if not.
 - Convert informal dates.
 - Do NOT guess missing data.
 - Return ONLY valid JSON.
