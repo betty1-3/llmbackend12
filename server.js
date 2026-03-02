@@ -1,6 +1,6 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
@@ -9,31 +9,27 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 if (!process.env.GEMINI_API_KEY) {
-  console.error("❌ Missing GEMINI_API_KEY in environment variables");
+  console.error("❌ GEMINI_API_KEY missing in environment variables");
   process.exit(1);
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Use safest compatible model
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
-  generationConfig: {
-    temperature: 0.1,
-    responseMimeType: "application/json"
-  }
+  model: "gemini-pro"
 });
 
-// Allow all origins (secure later if needed)
 app.use(cors());
-app.use(express.json({ limit: '128kb' }));
+app.use(express.json({ limit: "128kb" }));
 
-// Health check
+// Health check route
 app.get("/", (req, res) => {
   res.send("✅ Gemini backend running");
 });
 
 // ===============================
-// 🧠 Gemini Extraction Endpoint
+// 🧠 Extraction Endpoint
 // ===============================
 app.post("/api/ask-llm", async (req, res) => {
   try {
@@ -49,8 +45,9 @@ app.post("/api/ask-llm", async (req, res) => {
 
     let extractionInstruction = "";
 
-    if (field === "location") {
-      extractionInstruction = `
+    switch (field) {
+      case "location":
+        extractionInstruction = `
 Extract:
 - district
 - state
@@ -64,46 +61,59 @@ Return JSON:
   "state": string | null
 }
 `;
-    }
+        break;
 
-    if (field === "farm_size") {
-      extractionInstruction = `
+      case "farm_size":
+        extractionInstruction = `
 Extract:
 - farm_size_acres (number)
 
-Convert spoken numbers into decimals.
+Convert spoken numbers like "three", "teen", etc into numeric form.
+Always return acres.
 
 Return JSON:
 {
   "farm_size_acres": number | null
 }
 `;
-    }
+        break;
 
-    if (field === "crop_type") {
-      extractionInstruction = `
+      case "crop_type":
+        extractionInstruction = `
 Extract:
-- crop_type (normalize to English like rice, wheat, maize, cotton)
+- crop_type
+
+Normalize to English crop name like:
+rice, wheat, maize, cotton, sugarcane, etc.
 
 Return JSON:
 {
   "crop_type": string | null
 }
 `;
-    }
+        break;
 
-    if (field === "sowing_date") {
-      extractionInstruction = `
+      case "sowing_date":
+        extractionInstruction = `
 Extract:
 - sowing_date in YYYY-MM-DD format
 
-Convert informal phrases into proper date.
+Convert informal phrases like:
+"June ke beech"
+"last week"
+"kharif season"
 
 Return JSON:
 {
   "sowing_date": string | null
 }
 `;
+        break;
+
+      default:
+        return res.status(400).json({
+          error: "Invalid field type"
+        });
     }
 
     const prompt = `
@@ -111,15 +121,15 @@ You are a strict agricultural data extraction system.
 
 The farmer may speak in:
 English, Hindi, Odia, Tamil or mixed language.
+
 Speech may contain spelling mistakes.
 
 You must:
-- Correct obvious spelling errors in district/state.
+- Correct obvious spelling errors.
 - Normalize crop names.
 - Convert word numbers to numeric.
-- Convert farm size to acres.
 - Convert informal dates.
-- Do NOT guess missing data.
+- Do NOT guess missing information.
 - Return ONLY valid JSON.
 - No explanation.
 - No markdown.
@@ -134,24 +144,38 @@ Farmer speech:
     const response = await result.response;
     const text = response.text();
 
-    console.log("Gemini JSON output:", text);
+    console.log("Gemini raw output:", text);
 
-    let extracted;
+    // Extract JSON block safely
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
 
-    try {
-      extracted = JSON.parse(text);
-    } catch (parseError) {
-      console.error("JSON parse failed:", text);
+    if (!jsonMatch) {
+      console.error("No JSON found in Gemini response");
       return res.status(500).json({
-        error: "Invalid JSON returned from Gemini",
+        error: "No JSON found",
         raw: text
       });
     }
 
-    // 🔒 Validation Layer
+    let extracted;
+
+    try {
+      extracted = JSON.parse(jsonMatch[0]);
+    } catch (parseError) {
+      console.error("JSON parse failed:", jsonMatch[0]);
+      return res.status(500).json({
+        error: "JSON parse failed",
+        raw: text
+      });
+    }
+
+    // 🔒 Basic Validation Layer
 
     if (extracted.farm_size_acres !== undefined) {
-      if (typeof extracted.farm_size_acres !== "number" || extracted.farm_size_acres <= 0) {
+      if (
+        typeof extracted.farm_size_acres !== "number" ||
+        extracted.farm_size_acres <= 0
+      ) {
         extracted.farm_size_acres = null;
       }
     }
