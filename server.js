@@ -13,7 +13,6 @@ if (!process.env.GEMINI_API_KEY) {
   process.exit(1);
 }
 
-// Initialize new Gemini SDK
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
@@ -22,12 +21,9 @@ app.use(express.json({ limit: "128kb" }));
 
 // Health check
 app.get("/", (req, res) => {
-  res.send("✅ Gemini backend running (new SDK)");
+  res.send("✅ Gemini backend running");
 });
 
-// ===============================
-// 🧠 Extraction Endpoint
-// ===============================
 app.post("/api/ask-llm", async (req, res) => {
   try {
     const { speech_input, field } = req.body;
@@ -60,31 +56,31 @@ Return strictly valid JSON:
 `;
         break;
 
-      case "farm_size":
+      case "land_area":
         extractionInstruction = `
 Extract:
-- farm_size_acres (number)
+- land_area (number)
 
 Convert spoken numbers like "teen", "three", etc into numeric form.
-Always return acres.
+Always return value in acres.
 
 Return strictly valid JSON:
 {
-  "farm_size_acres": number | null
+  "land_area": number | null
 }
 `;
         break;
 
-      case "crop_type":
+      case "crop":
         extractionInstruction = `
 Extract:
-- crop_type
+- crop
 
 Normalize crop name to English (rice, wheat, maize, cotton, etc).
 
 Return strictly valid JSON:
 {
-  "crop_type": string | null
+  "crop": string | null
 }
 `;
         break;
@@ -136,14 +132,12 @@ Farmer speech:
 "${speech_input}"
 `;
 
-    // 🔥 New SDK call
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
 
     console.log("Gemini raw output:", text);
 
-    // Extract JSON safely
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
@@ -164,13 +158,13 @@ Farmer speech:
       });
     }
 
-    // Basic validation
-    if (extracted.farm_size_acres !== undefined) {
+    // Validation
+    if (extracted.land_area !== undefined) {
       if (
-        typeof extracted.farm_size_acres !== "number" ||
-        extracted.farm_size_acres <= 0
+        typeof extracted.land_area !== "number" ||
+        extracted.land_area <= 0
       ) {
-        extracted.farm_size_acres = null;
+        extracted.land_area = null;
       }
     }
 
@@ -181,9 +175,10 @@ Farmer speech:
       }
     }
 
+    // ✅ Add today's date as end_date
     const today = new Date().toISOString().split("T")[0];
-    extracted.generated_date = today;
-    
+    extracted.end_date = today;
+
     return res.json(extracted);
 
   } catch (err) {
